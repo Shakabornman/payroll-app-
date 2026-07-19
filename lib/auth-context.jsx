@@ -6,18 +6,46 @@ import {
   signInWithEmailAndPassword,
   signOut as firebaseSignOut,
 } from "firebase/auth";
-import { auth } from "@/lib/firebase";
+import { collection, getDocs, query, where } from "firebase/firestore";
+import { auth, db } from "@/lib/firebase";
 
 const AuthContext = createContext(undefined);
 
+// Layer 1 access gate: is this signed-in person HAE staff at all?
+// The `employees` collection is keyed by employeeNumber, not email/uid, so
+// Firestore rules can't enforce this match themselves (they only require
+// request.auth != null to read it) - the frontend is responsible for it.
+// See hae_access_control_detail memory: `email` field name is unverified
+// against a real document, confirm if this starts rejecting real staff.
+async function findEmployeeByEmail(email) {
+  const q = query(collection(db, "employees"), where("email", "==", email));
+  const snapshot = await getDocs(q);
+  if (snapshot.empty) return null;
+  const doc = snapshot.docs[0];
+  return { id: doc.id, ...doc.data() };
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [authResolved, setAuthResolved] = useState(false);
+  const [employee, setEmployee] = useState(null);
+  const [accessChecked, setAccessChecked] = useState(false);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
-      setLoading(false);
+      setAuthResolved(true);
+
+      if (!firebaseUser) {
+        setEmployee(null);
+        setAccessChecked(true);
+        return;
+      }
+
+      setAccessChecked(false);
+      const match = await findEmployeeByEmail(firebaseUser.email);
+      setEmployee(match);
+      setAccessChecked(true);
     });
     return unsubscribe;
   }, []);
@@ -25,8 +53,11 @@ export function AuthProvider({ children }) {
   const signIn = (email, password) => signInWithEmailAndPassword(auth, email, password);
   const signOut = () => firebaseSignOut(auth);
 
+  const loading = !authResolved || (Boolean(user) && !accessChecked);
+  const authorized = Boolean(user && employee);
+
   return (
-    <AuthContext.Provider value={{ user, loading, signIn, signOut }}>
+    <AuthContext.Provider value={{ user, employee, authorized, loading, signIn, signOut }}>
       {children}
     </AuthContext.Provider>
   );
