@@ -15,8 +15,6 @@ const AuthContext = createContext(undefined);
 // The `employees` collection is keyed by employeeNumber, not email/uid, so
 // Firestore rules can't enforce this match themselves (they only require
 // request.auth != null to read it) - the frontend is responsible for it.
-// See hae_access_control_detail memory: `email` field name is unverified
-// against a real document, confirm if this starts rejecting real staff.
 async function findEmployeeByEmail(email) {
   const q = query(collection(db, "employees"), where("email", "==", email));
   const snapshot = await getDocs(q);

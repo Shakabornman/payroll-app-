@@ -36,7 +36,8 @@ export default function LoginPage() {
     try {
       await signIn(email, password);
       router.replace("/");
-    } catch {
+    } catch (err) {
+      console.error("Firebase sign-in error:", err.code, err.message);
       setError("Incorrect email or password.");
     } finally {
       setSubmitting(false);
