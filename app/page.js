@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { ProtectedRoute } from "@/components/protected-route";
 import { useAuth } from "@/lib/auth-context";
 import { Button } from "@/components/ui/button";
@@ -14,9 +15,15 @@ function HomeContent() {
         Signed in as {user?.email} (employee #{employee?.id}). The HR Payroll
         portal starts here.
       </p>
-      <Button variant="outline" onClick={signOut}>
-        Sign out
-      </Button>
+      <div className="flex gap-3">
+        <Button
+          variant="outline"
+          render={<Link href="/rls-test">Run Supabase RLS test</Link>}
+        />
+        <Button variant="outline" onClick={signOut}>
+          Sign out
+        </Button>
+      </div>
     </div>
   );
 }
