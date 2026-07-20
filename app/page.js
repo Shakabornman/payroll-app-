@@ -15,7 +15,8 @@ function HomeContent() {
         Signed in as {user?.email} (employee #{employee?.id}). The HR Payroll
         portal starts here.
       </p>
-      <div className="flex gap-3">
+      <div className="flex flex-wrap justify-center gap-3">
+        <Button variant="outline" render={<Link href="/employees">Employees</Link>} />
         <Button
           variant="outline"
           render={<Link href="/rls-test">Run Supabase RLS test</Link>}
