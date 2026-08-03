@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
+import { NavBar } from "@/components/nav-bar";
 
 export function ProtectedRoute({ children }) {
   const { user, authorized, loading } = useAuth();
@@ -36,5 +37,10 @@ export function ProtectedRoute({ children }) {
     );
   }
 
-  return children;
+  return (
+    <div className="flex min-h-screen flex-col">
+      <NavBar />
+      <div className="flex-1">{children}</div>
+    </div>
+  );
 }

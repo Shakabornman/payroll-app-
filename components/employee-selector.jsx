@@ -89,7 +89,14 @@ export function EmployeeSelector({ onSelect }) {
           onChange={(event) => setSearch(event.target.value)}
           className="max-w-xs"
         />
-        <Select value={payPointId} onValueChange={setPayPointId}>
+        <Select
+          items={[
+            { value: ALL_PAY_POINTS, label: "All pay points" },
+            ...payPoints.map((point) => ({ value: point.id, label: point.name })),
+          ]}
+          value={payPointId}
+          onValueChange={setPayPointId}
+        >
           <SelectTrigger>
             <SelectValue placeholder="All pay points" />
           </SelectTrigger>

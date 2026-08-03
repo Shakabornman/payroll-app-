@@ -135,6 +135,8 @@ function RlsTestContent() {
           <CardDescription>
             Firebase UID: <code>{user?.uid}</code>
             <br />
+            Firebase email (currently signed in as): <code>{user?.email ?? "none"}</code>
+            <br />
             Employee number in use (first match): <code>{employeeNumber ?? "none"}</code>
           </CardDescription>
         </CardHeader>
