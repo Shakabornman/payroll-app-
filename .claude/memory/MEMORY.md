@@ -1,0 +1,8 @@
+- [HAE Payroll architecture](hae_payroll_architecture.md) — Firebase+Supabase split, auth bridge & known auth.uid() bug, access control, schema state, data currency
+- [HAE credential hygiene](hae_credential_hygiene.md) — plaintext service-account files in C:\HAE that must stay out of the new GitHub frontend repo
+- [HAE frontend decisions](hae_frontend_decisions.md) — Next.js/JS/shadcn stack, GitHub repo URL, no server secrets needed
+- [User profile: Shaka](user_profile_shaka.md) — inexperienced dev, wants heavy hand-holding and step-by-step direction
+- [HAE access control detail](hae_access_control_detail.md) — two-layer gate: employees-email match (portal) vs access_control/{uid}.accessLevels (RLS/executive-finance features)
+- [HAE payroll screen map](hae_payroll_screen_map.md) — full screen scope: Dashboard, Payslip processing, Hours recon, Statutory reports, Exports, Employee selector; payroll_admin-only, embedded in Ekhaya Connect
+- [HAE SimplePay design reference](hae_simplepay_design_reference.md) — running log of real SimplePay screenshots client is sharing; confirms user's own record is employee 0008
+- [HAE Claude memory backup](hae_claude_memory_backup.md) — git-backed up to shared partition; auto-pull-on-session-start hook now live on both Windows and Linux

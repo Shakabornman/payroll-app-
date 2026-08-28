@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { recalculatePayslip } from "@/lib/payslip-calculator";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,7 +28,7 @@ function formatHours(value) {
 function formatSaveError(error) {
   const base = `${error.code ?? ""} ${error.message}`.trim();
   if (error.code === "42501") {
-    return `${base}. If this is a permission error, the client needs to run GRANT UPDATE ON payroll.payslips TO authenticated; in Supabase.`;
+    return `${base}. If this is a permission error, the client needs to run GRANT UPDATE ON payroll.payslips TO authenticated; and GRANT INSERT, UPDATE ON payroll.payslip_lines TO authenticated; in Supabase.`;
   }
   return base;
 }
@@ -43,18 +44,28 @@ function formatSaveError(error) {
 // indistinguishable from the employee list itself being wrong.
 //
 // `editable` (true for a draft/non-finalised pay run) turns the Hours cell
-// into an input with a per-row Save. Rate is deliberately read-only here -
+// into an input with a per-row Save - but only for payslips that haven't
+// themselves been individually finalised yet (via BulkFinaliseDialog); a
+// finalised payslip locks its own hours regardless of the pay run's own
+// status, matching the real system's two separate locks (payslip-level
+// finalise vs pay-run-level post). Rate is deliberately read-only here -
 // it's a recurring, dated employee-level fact (like Basic Salary), set once
 // via SetHourlyRateDialog on the employee's own record (reachable via the
-// name link below), not something captured per pay period. Gross pay shown
-// here is a simple hours x rate display value, NOT a real tax calculation -
-// PAYE/UIF/SDL and payslip_lines generation are deliberately out of scope
-// until the calc functions get wired in (blocked on confirming
-// employees.birth_date exists).
-export function HourlyHoursList({ payRunId, editable = false, onSelectEmployee }) {
+// name link below), not something captured per pay period. Saving hours
+// keeps the BASIC_HOURLY payroll.payslip_lines row in sync (see handleSave),
+// then triggers a live PAYE/UIF/SDL recalculation (lib/payslip-calculator.js)
+// so Nett Pay on Payslip Processing reflects it immediately - matching
+// SimplePay's own behaviour of recalculating as you update detail, not a
+// separate "Calculate" step. Not shown on this screen itself (Hours stays
+// capture-only, see the architecture note in app/hours/page.js) - view the
+// breakdown via the employee's payslip detail.
+export function HourlyHoursList({ payRunId, periodStart, periodEnd, editable = false, onSelectEmployee }) {
   const [rows, setRows] = useState(null);
   const [error, setError] = useState("");
   const [edits, setEdits] = useState({});
+  const [basicHourlyPayItemId, setBasicHourlyPayItemId] = useState(null);
+  const [frequencyName, setFrequencyName] = useState(null);
+  const [calcWarnings, setCalcWarnings] = useState([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -66,7 +77,7 @@ export function HourlyHoursList({ payRunId, editable = false, onSelectEmployee }
 
       const { data: frequency, error: frequencyError } = await supabase
         .from("pay_frequencies")
-        .select("id")
+        .select("id, name")
         .ilike("name", "%two weekly%")
         .maybeSingle();
 
@@ -80,6 +91,8 @@ export function HourlyHoursList({ payRunId, editable = false, onSelectEmployee }
         );
         return;
       }
+
+      setFrequencyName(frequency.name);
 
       const { data: employees, error: employeesError } = await supabase
         .from("employees")
@@ -115,13 +128,126 @@ export function HourlyHoursList({ payRunId, editable = false, onSelectEmployee }
       }));
 
       setRows(merged);
+
+      // Needed by handleSave to keep the BASIC_HOURLY payslip_lines row in
+      // sync with hours worked - fetched once here rather than per-save.
+      const { data: payItem } = await supabase
+        .from("pay_items")
+        .select("id")
+        .eq("code", "BASIC_HOURLY")
+        .maybeSingle();
+      if (!cancelled && payItem) {
+        setBasicHourlyPayItemId(payItem.id);
+      }
+
+      // Reconcile rate for payslips that don't already match the employee's
+      // current BASIC_HOURLY regular input - covers both a payslip created
+      // before any rate existed (normal_rate null) and a same-period rate
+      // correction (see below). Skips finalised payslips - those are locked,
+      // same rule as hours editing.
+      const candidates = merged.filter((row) => row.payslip && !row.payslip.finalised_at);
+      const ratePatches = [];
+      if (candidates.length > 0 && periodStart && periodEnd) {
+        const { data: regularInputs } = await supabase
+          .from("employee_regular_inputs")
+          .select("employee_number, amount, effective_from, effective_to, created_at, pay_items(code)")
+          .in("employee_number", candidates.map((row) => row.employee_number));
+
+        if (!cancelled && regularInputs) {
+          // Corrections are inserted as a new row rather than editing the
+          // old one (the documented "raise = new row" rule), so more than
+          // one row can legitimately cover the same period for the same
+          // employee (e.g. fixing a typo'd rate same-day). Resolve to a
+          // single row: latest effective_from wins, ties broken by latest
+          // created_at (the more recently entered correction).
+          const coveringByEmployee = new Map();
+          for (const input of regularInputs) {
+            if (input.pay_items?.code !== "BASIC_HOURLY") continue;
+            const covers = input.effective_from <= periodEnd && (!input.effective_to || input.effective_to >= periodStart);
+            if (!covers) continue;
+            const current = coveringByEmployee.get(input.employee_number);
+            if (
+              !current ||
+              input.effective_from > current.effective_from ||
+              (input.effective_from === current.effective_from && input.created_at > current.created_at)
+            ) {
+              coveringByEmployee.set(input.employee_number, input);
+            }
+          }
+
+          for (const row of candidates) {
+            const current = coveringByEmployee.get(row.employee_number);
+            if (!current) continue;
+            const rate = Number(current.amount);
+            if (rate === row.payslip.normal_rate) continue;
+            const grossRemuneration = row.payslip.normal_hours != null ? row.payslip.normal_hours * rate : null;
+            const { error: syncError } = await supabase
+              .from("payslips")
+              .update({ normal_rate: rate, gross_remuneration: grossRemuneration })
+              .eq("id", row.payslip.id);
+            if (!syncError) {
+              ratePatches.push({ payslipId: row.payslip.id, normal_rate: rate, gross_remuneration: grossRemuneration });
+            }
+          }
+
+          if (!cancelled && ratePatches.length > 0) {
+            const patchById = new Map(ratePatches.map((p) => [p.payslipId, p]));
+            setRows((prev) =>
+              prev.map((r) => {
+                const patch = r.payslip ? patchById.get(r.payslip.id) : null;
+                return patch
+                  ? { ...r, payslip: { ...r.payslip, normal_rate: patch.normal_rate, gross_remuneration: patch.gross_remuneration } }
+                  : r;
+              })
+            );
+          }
+        }
+      }
+
+      // Live-calc PAYE/UIF/SDL for every non-finalised payslip that already
+      // has a gross amount - matches SimplePay's own "recalculate as you go"
+      // behaviour, and self-heals payslips saved before this feature existed
+      // (same reconcile-on-load pattern as the rate fix above). Not gated on
+      // `cancelled` per-iteration since these are independent background
+      // writes, not state updates this component reads back.
+      if (frequency.name) {
+        const patchedGross = new Map(ratePatches.map((p) => [p.payslipId, p.gross_remuneration]));
+        const results = await Promise.all(
+          merged
+            .filter((row) => row.payslip && !row.payslip.finalised_at)
+            .map((row) => {
+              const gross = patchedGross.has(row.payslip.id)
+                ? patchedGross.get(row.payslip.id)
+                : row.payslip.gross_remuneration;
+              if (gross == null) return null;
+              return recalculatePayslip({
+                payslipId: row.payslip.id,
+                employeeNumber: row.employee_number,
+                payRunId,
+                frequencyName: frequency.name,
+                periodEnd,
+              }).then((result) => ({ employeeNumber: row.employee_number, ...result }));
+            })
+        );
+
+        if (!cancelled) {
+          const messages = [
+            ...new Set(
+              results
+                .filter(Boolean)
+                .flatMap((r) => (r.warnings ?? []).map((w) => `${r.employeeNumber}: ${w}`))
+            ),
+          ];
+          setCalcWarnings(messages);
+        }
+      }
     }
 
     run();
     return () => {
       cancelled = true;
     };
-  }, [payRunId]);
+  }, [payRunId, periodStart, periodEnd]);
 
   function editState(payslip) {
     return (
@@ -168,6 +294,55 @@ export function HourlyHoursList({ payRunId, editable = false, onSelectEmployee }
       return;
     }
 
+    // Keep the BASIC_HOURLY income line in sync with hours worked - without
+    // this, payroll.payslip_lines never reflects captured hours at all (the
+    // payslip generator only creates lines for 'recurring' items at
+    // creation time; hourly pay is 'rate_times_quantity', so its line has to
+    // be kept current here as hours change).
+    if (basicHourlyPayItemId && grossRemuneration != null) {
+      const { data: existingLine } = await supabase
+        .from("payslip_lines")
+        .select("id")
+        .eq("pay_run_id", payRunId)
+        .eq("employee_number", row.employee_number)
+        .eq("pay_item_id", basicHourlyPayItemId)
+        .maybeSingle();
+
+      const lineError = existingLine
+        ? (await supabase.from("payslip_lines").update({ amount: grossRemuneration }).eq("id", existingLine.id))
+            .error
+        : (
+            await supabase.from("payslip_lines").insert({
+              pay_run_id: payRunId,
+              employee_number: row.employee_number,
+              pay_item_id: basicHourlyPayItemId,
+              amount: grossRemuneration,
+            })
+          ).error;
+
+      if (lineError) {
+        updateEdit(payslip.id, { status: "error", message: formatSaveError(lineError) });
+        return;
+      }
+    }
+
+    // Live recalc, matching SimplePay's own behaviour - Nett Pay on Payslip
+    // Processing should reflect these hours immediately, not after a
+    // separate step. Warnings (e.g. missing birth date) surface below the
+    // table rather than being swallowed silently - see calcWarnings.
+    const { warnings: recalcWarnings } = await recalculatePayslip({
+      payslipId: payslip.id,
+      employeeNumber: row.employee_number,
+      payRunId,
+      frequencyName,
+      periodEnd,
+    });
+    if (recalcWarnings.length > 0) {
+      setCalcWarnings((prev) => [
+        ...new Set([...prev, ...recalcWarnings.map((w) => `${row.employee_number}: ${w}`)]),
+      ]);
+    }
+
     setRows((prev) =>
       prev.map((r) =>
         r.payslip?.id === payslip.id
@@ -195,7 +370,18 @@ export function HourlyHoursList({ payRunId, editable = false, onSelectEmployee }
   }
 
   return (
-    <Table>
+    <div className="space-y-3">
+      {calcWarnings.length > 0 && (
+        <div className="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
+          <p className="mb-1 font-medium">Nett Pay could not be fully calculated for some employees:</p>
+          <ul className="list-inside list-disc space-y-0.5">
+            {calcWarnings.map((message) => (
+              <li key={message}>{message}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+      <Table>
       <TableHeader>
         <TableRow>
           <TableHead>Name</TableHead>
@@ -210,7 +396,11 @@ export function HourlyHoursList({ payRunId, editable = false, onSelectEmployee }
       </TableHeader>
       <TableBody>
         {rows.map((row) => {
-          const canEdit = editable && row.payslip;
+          // A payslip that's been individually finalised (via
+          // BulkFinaliseDialog) locks its own hours from editing regardless
+          // of whether the whole pay run has been posted yet - these are two
+          // separate locks (payslip-level finalise vs pay-run-level post).
+          const canEdit = editable && row.payslip && !row.payslip.finalised_at;
           const state = canEdit ? editState(row.payslip) : null;
 
           return (
@@ -288,6 +478,7 @@ export function HourlyHoursList({ payRunId, editable = false, onSelectEmployee }
           );
         })}
       </TableBody>
-    </Table>
+      </Table>
+    </div>
   );
 }

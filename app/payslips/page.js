@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ProtectedRoute } from "@/components/protected-route";
 import { PayslipRunList } from "@/components/payslip-run-list";
 import { EmployeePayslipDetail } from "@/components/employee-payslip-detail";
+import { PostPayRunDialog } from "@/components/post-pay-run-dialog";
+import { BulkFinaliseDialog } from "@/components/bulk-finalise-dialog";
 import { supabase } from "@/lib/supabase";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -97,10 +99,13 @@ function PayslipsContent() {
   const [error, setError] = useState("");
   const [selectedEmployee, setSelectedEmployee] = useState(null);
 
-  useEffect(() => {
+  // Extracted as named functions (not just useEffect closures) so both can
+  // be re-run after PostPayRunDialog creates the next period, or
+  // BulkFinaliseDialog finalises payslips.
+  const fetchPayRuns = useCallback(() => {
     supabase
       .from("pay_runs")
-      .select("id, period_start, period_end, pay_date, status, pay_frequencies(name)")
+      .select("id, period_start, period_end, pay_date, status, pay_frequency_id, pay_frequencies(name)")
       .order("period_start", { ascending: false })
       .then(({ data, error }) => {
         if (error) {
@@ -109,7 +114,9 @@ function PayslipsContent() {
         }
         setPayRuns(data ?? []);
       });
+  }, []);
 
+  const fetchCounts = useCallback(() => {
     // Total/Finalised counts per pay run - computed client-side from a single
     // lightweight query rather than a DB view, since volumes here are small
     // (a few hundred payslips total). Best-effort: a failure here shouldn't
@@ -130,7 +137,17 @@ function PayslipsContent() {
       });
   }, []);
 
+  useEffect(() => {
+    fetchPayRuns();
+    fetchCounts();
+  }, [fetchPayRuns, fetchCounts]);
+
   const selectedRun = payRuns?.find((run) => run.id === payRunId);
+
+  // Real rule (client-confirmed): a pay run can't be posted until at least
+  // one payslip in it has been finalised. Derived from `counts` (already
+  // fetched above), not a separate query - plain derivation, not state.
+  const finalisedCount = selectedRun ? counts.get(selectedRun.id)?.finalised ?? 0 : null;
 
   return (
     <div className="mx-auto max-w-4xl space-y-6 px-4 py-12">
@@ -192,7 +209,31 @@ function PayslipsContent() {
           <Badge variant={selectedRun.status === "finalised" ? "default" : "secondary"}>
             {selectedRun.status === "finalised" ? "Finalised" : "Draft"}
           </Badge>
+          {selectedRun.status !== "finalised" && (
+            <BulkFinaliseDialog
+              payRunId={selectedRun.id}
+              onFinalised={() => {
+                fetchCounts();
+              }}
+            />
+          )}
+          {selectedRun.status !== "finalised" && finalisedCount !== null && finalisedCount > 0 && (
+            <PostPayRunDialog
+              currentRun={selectedRun}
+              onPosted={(newRunId) => {
+                fetchPayRuns();
+                fetchCounts();
+                setPayRunId(newRunId);
+              }}
+            />
+          )}
         </div>
+      )}
+
+      {selectedRun && selectedRun.status !== "finalised" && finalisedCount === 0 && (
+        <p className="text-sm text-muted-foreground">
+          Payslips need to be finalised before this pay run can be posted.
+        </p>
       )}
 
       {selectedRun && !selectedEmployee && (

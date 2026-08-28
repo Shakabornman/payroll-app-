@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import {
   Table,
   TableBody,
@@ -26,6 +27,7 @@ function formatMoney(value) {
 export function PayslipRunList({ payRunId, onSelectEmployee }) {
   const [rows, setRows] = useState(null);
   const [error, setError] = useState("");
+  const [search, setSearch] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -33,6 +35,7 @@ export function PayslipRunList({ payRunId, onSelectEmployee }) {
     async function run() {
       setRows(null);
       setError("");
+      setSearch("");
 
       const { data: payslips, error: payslipsError } = await supabase
         .from("payslips")
@@ -94,46 +97,72 @@ export function PayslipRunList({ payRunId, onSelectEmployee }) {
     return <p className="text-sm text-muted-foreground">No payslips captured for this pay run yet.</p>;
   }
 
+  // Client-side filter, same as EmployeeSelector - this run's payslip count
+  // is small, so no need for a DB round trip on every keystroke. Kept as its
+  // own field (rather than reusing EmployeeSelector) since this list is
+  // scoped to the run's actual payslips, not the whole company roster - see
+  // the file-level comment.
+  const term = search.trim().toLowerCase();
+  const visibleRows = term
+    ? rows.filter(
+        (row) =>
+          row.full_name.toLowerCase().includes(term) || row.employee_number.toLowerCase().includes(term)
+      )
+    : rows;
+
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Name</TableHead>
-          <TableHead>Employee #</TableHead>
-          <TableHead>Job title</TableHead>
-          <TableHead>Nett pay</TableHead>
-          <TableHead>Status</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {rows.map((row) => (
-          <TableRow key={row.employee_number}>
-            <TableCell>
-              <button
-                type="button"
-                className="text-primary underline-offset-4 hover:underline"
-                onClick={() =>
-                  onSelectEmployee({
-                    employee_number: row.employee_number,
-                    full_name: row.full_name,
-                    job_title: row.job_title,
-                  })
-                }
-              >
-                {row.full_name}
-              </button>
-            </TableCell>
-            <TableCell>{row.employee_number}</TableCell>
-            <TableCell>{row.job_title ?? "—"}</TableCell>
-            <TableCell>{formatMoney(row.nett_pay)}</TableCell>
-            <TableCell>
-              <Badge variant={row.finalised_at ? "default" : "secondary"}>
-                {row.finalised_at ? "Finalised" : "Pending"}
-              </Badge>
-            </TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+    <div className="space-y-3">
+      <Input
+        placeholder="Search by name or employee number"
+        value={search}
+        onChange={(event) => setSearch(event.target.value)}
+        className="max-w-xs"
+      />
+
+      {visibleRows.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No payslips match &quot;{search}&quot;.</p>
+      ) : (
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Name</TableHead>
+              <TableHead>Employee #</TableHead>
+              <TableHead>Job title</TableHead>
+              <TableHead>Nett pay</TableHead>
+              <TableHead>Status</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {visibleRows.map((row) => (
+              <TableRow key={row.employee_number}>
+                <TableCell>
+                  <button
+                    type="button"
+                    className="text-primary underline-offset-4 hover:underline"
+                    onClick={() =>
+                      onSelectEmployee({
+                        employee_number: row.employee_number,
+                        full_name: row.full_name,
+                        job_title: row.job_title,
+                      })
+                    }
+                  >
+                    {row.full_name}
+                  </button>
+                </TableCell>
+                <TableCell>{row.employee_number}</TableCell>
+                <TableCell>{row.job_title ?? "—"}</TableCell>
+                <TableCell>{formatMoney(row.nett_pay)}</TableCell>
+                <TableCell>
+                  <Badge variant={row.finalised_at ? "default" : "secondary"}>
+                    {row.finalised_at ? "Finalised" : "Pending"}
+                  </Badge>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      )}
+    </div>
   );
 }

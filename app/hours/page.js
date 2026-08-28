@@ -1,9 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { ProtectedRoute } from "@/components/protected-route";
 import { HourlyHoursList } from "@/components/hourly-hours-list";
-import { PostPayRunDialog } from "@/components/post-pay-run-dialog";
 import { EmployeePayslipDetail } from "@/components/employee-payslip-detail";
 import { supabase } from "@/lib/supabase";
 import { Badge } from "@/components/ui/badge";
@@ -39,9 +38,15 @@ function HoursContent() {
   // Hours only apply to hourly ("Two Weekly") staff - the other two
   // frequencies are fixed-salary and never carry normal_hours/normal_rate,
   // so this screen only ever needs Two Weekly pay runs, not the full list.
-  // Extracted as a named function (not just a useEffect closure) so it can
-  // be re-run after PostPayRunDialog creates the next period.
-  const fetchPayRuns = useCallback(() => {
+  //
+  // This screen is hours-capture ONLY. Creating/posting/finalising a pay run
+  // is not an hourly-specific concern - it's handled uniformly for every
+  // frequency on Payslip Processing (see app/payslips/page.js), matching
+  // real SimplePay's structure: Pay Runs is one place across all
+  // frequencies, separate from per-employee/per-type capture screens. An
+  // earlier version of this page had Post/Finalise bolted on here, which was
+  // the wrong place for it - Two Weekly is not special in that regard.
+  useEffect(() => {
     supabase
       .from("pay_runs")
       .select("id, period_start, period_end, pay_date, status, pay_frequencies!inner(name)")
@@ -55,10 +60,6 @@ function HoursContent() {
         setPayRuns(data ?? []);
       });
   }, []);
-
-  useEffect(() => {
-    fetchPayRuns();
-  }, [fetchPayRuns]);
 
   const selectedRun = payRuns?.find((run) => run.id === payRunId);
 
@@ -148,18 +149,11 @@ function HoursContent() {
             <Badge variant={selectedRun.status === "finalised" ? "default" : "secondary"}>
               {selectedRun.status === "finalised" ? "Finalised" : "Draft"}
             </Badge>
-            {selectedRun.status !== "finalised" && (
-              <PostPayRunDialog
-                currentRun={selectedRun}
-                onPosted={(newRunId) => {
-                  fetchPayRuns();
-                  setPayRunId(newRunId);
-                }}
-              />
-            )}
           </div>
           <HourlyHoursList
             payRunId={selectedRun.id}
+            periodStart={selectedRun.period_start}
+            periodEnd={selectedRun.period_end}
             editable={selectedRun.status !== "finalised"}
             onSelectEmployee={setSelectedEmployee}
           />
