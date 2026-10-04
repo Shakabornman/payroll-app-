@@ -116,10 +116,16 @@ export function PostPayRunDialog({ currentRun, onPosted }) {
       return;
     }
 
+    // Only staff employed by the period end get a payslip. Hourly staff who
+    // simply didn't work get one with zero hours; someone not yet started
+    // (or with no start date on record) gets none. Leavers still need a
+    // last-day field before they can be excluded here too.
     const { data: employees, error: employeesError } = await supabase
       .from("employees")
       .select("employee_number")
-      .eq("pay_frequency_id", frequencyId);
+      .eq("pay_frequency_id", frequencyId)
+      .not("employment_date", "is", null)
+      .lte("employment_date", next.periodEnd);
     if (employeesError) {
       setFormError(
         `The next pay run was created, but could not load employees to seed payslips: ${formatError(employeesError)}. ` +

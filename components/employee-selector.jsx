@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -22,6 +22,27 @@ import {
 
 const ALL_PAY_POINTS = "all";
 
+const SORT_ACCESSORS = {
+  employee_number: (e) => e.employee_number,
+  full_name: (e) => e.full_name,
+  job_title: (e) => e.job_title,
+  pay_point: (e) => e.pay_points?.name,
+  status: (e) => (e.is_active ? "Active" : "Inactive"),
+};
+
+const COLUMNS = [
+  { key: "employee_number", label: "Employee #" },
+  { key: "full_name", label: "Name" },
+  { key: "job_title", label: "Job title" },
+  { key: "pay_point", label: "Pay point" },
+  { key: "status", label: "Status" },
+];
+
+function sortIndicator(sort, key) {
+  if (sort.key !== key) return "";
+  return sort.dir === "asc" ? " ▲" : " ▼";
+}
+
 // Read-only, shared across Payslip processing and Reports per the client's
 // screen map. No "classification" filter yet - the classification columns
 // mentioned in the original handoff don't exist in any migration we have
@@ -34,6 +55,26 @@ export function EmployeeSelector({ onSelect }) {
   const [payPoints, setPayPoints] = useState([]);
   const [employees, setEmployees] = useState(null);
   const [error, setError] = useState("");
+  const [sort, setSort] = useState({ key: "full_name", dir: "asc" });
+
+  const sortedEmployees = useMemo(() => {
+    if (!employees) return null;
+    const accessor = SORT_ACCESSORS[sort.key];
+    const direction = sort.dir === "asc" ? 1 : -1;
+    return [...employees].sort((a, b) => {
+      const av = accessor(a) ?? "";
+      const bv = accessor(b) ?? "";
+      return String(av).localeCompare(String(bv), undefined, { numeric: true }) * direction;
+    });
+  }, [employees, sort]);
+
+  function toggleSort(key) {
+    setSort((current) =>
+      current.key === key
+        ? { key, dir: current.dir === "asc" ? "desc" : "asc" }
+        : { key, dir: "asc" }
+    );
+  }
 
   useEffect(() => {
     supabase
@@ -123,23 +164,41 @@ export function EmployeeSelector({ onSelect }) {
         <p className="text-sm text-muted-foreground">No employees match.</p>
       )}
 
-      {!error && employees && employees.length > 0 && (
+      {!error && sortedEmployees && sortedEmployees.length > 0 && (
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Employee #</TableHead>
-              <TableHead>Name</TableHead>
-              <TableHead>Job title</TableHead>
-              <TableHead>Pay point</TableHead>
-              <TableHead>Status</TableHead>
-              {onSelect && <TableHead />}
+              {COLUMNS.map((column) => (
+                <TableHead key={column.key}>
+                  <button
+                    type="button"
+                    className="font-medium hover:underline"
+                    onClick={() => toggleSort(column.key)}
+                  >
+                    {column.label}
+                    {sortIndicator(sort, column.key)}
+                  </button>
+                </TableHead>
+              ))}
             </TableRow>
           </TableHeader>
           <TableBody>
-            {employees.map((employee) => (
+            {sortedEmployees.map((employee) => (
               <TableRow key={employee.employee_number}>
                 <TableCell>{employee.employee_number}</TableCell>
-                <TableCell>{employee.full_name}</TableCell>
+                <TableCell>
+                  {onSelect ? (
+                    <button
+                      type="button"
+                      className="text-primary underline-offset-4 hover:underline"
+                      onClick={() => onSelect(employee)}
+                    >
+                      {employee.full_name}
+                    </button>
+                  ) : (
+                    employee.full_name
+                  )}
+                </TableCell>
                 <TableCell>{employee.job_title ?? "—"}</TableCell>
                 <TableCell>{employee.pay_points?.name ?? "—"}</TableCell>
                 <TableCell>
@@ -147,17 +206,6 @@ export function EmployeeSelector({ onSelect }) {
                     {employee.is_active ? "Active" : "Inactive"}
                   </Badge>
                 </TableCell>
-                {onSelect && (
-                  <TableCell>
-                    <button
-                      type="button"
-                      className="text-primary underline-offset-4 hover:underline"
-                      onClick={() => onSelect(employee)}
-                    >
-                      Select
-                    </button>
-                  </TableCell>
-                )}
               </TableRow>
             ))}
           </TableBody>

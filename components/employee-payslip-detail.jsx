@@ -11,6 +11,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { SetHourlyRateDialog } from "@/components/set-hourly-rate-dialog";
+import { AddRegularInputDialog } from "@/components/add-regular-input-dialog";
+import { AddPayslipLineDialog } from "@/components/add-payslip-line-dialog";
 import {
   Table,
   TableBody,
@@ -134,6 +136,7 @@ function LineItemTable({ rows }) {
 export function EmployeePayslipDetail({ employee, payRunId }) {
   const employeeNumber = employee.employee_number;
   const [regularInputsRefreshKey, setRegularInputsRefreshKey] = useState(0);
+  const [payslipRefreshKey, setPayslipRefreshKey] = useState(0);
 
   const payslip = useSection(
     () =>
@@ -144,7 +147,7 @@ export function EmployeePayslipDetail({ employee, payRunId }) {
         )
         .eq("employee_number", employeeNumber)
         .eq("pay_run_id", payRunId),
-    [employeeNumber, payRunId]
+    [employeeNumber, payRunId, payslipRefreshKey]
   );
 
   const regularInputs = useSection(
@@ -164,7 +167,7 @@ export function EmployeePayslipDetail({ employee, payRunId }) {
         .select("id, amount, ytd_amount, pay_items(name, category)")
         .eq("employee_number", employeeNumber)
         .eq("pay_run_id", payRunId),
-    [employeeNumber, payRunId]
+    [employeeNumber, payRunId, payslipRefreshKey]
   );
 
   const leaveBalances = useSection(
@@ -232,6 +235,15 @@ export function EmployeePayslipDetail({ employee, payRunId }) {
       <Card>
         <CardHeader>
           <CardTitle>Payslip breakdown</CardTitle>
+          {run && !run.finalised_at && (
+            <CardAction>
+              <AddPayslipLineDialog
+                employeeNumber={employeeNumber}
+                payRunId={payRunId}
+                onSaved={() => setPayslipRefreshKey((key) => key + 1)}
+              />
+            </CardAction>
+          )}
         </CardHeader>
         <CardContent className="space-y-4">
           <SectionBody
@@ -302,7 +314,11 @@ export function EmployeePayslipDetail({ employee, payRunId }) {
       <Card>
         <CardHeader>
           <CardTitle>Regular inputs</CardTitle>
-          <CardAction>
+          <CardAction className="flex gap-2">
+            <AddRegularInputDialog
+              employeeNumber={employeeNumber}
+              onSaved={() => setRegularInputsRefreshKey((key) => key + 1)}
+            />
             <SetHourlyRateDialog
               employeeNumber={employeeNumber}
               onSaved={() => setRegularInputsRefreshKey((key) => key + 1)}

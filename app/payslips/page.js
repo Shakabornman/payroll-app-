@@ -1,11 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ProtectedRoute } from "@/components/protected-route";
 import { PayslipRunList } from "@/components/payslip-run-list";
 import { EmployeePayslipDetail } from "@/components/employee-payslip-detail";
 import { PostPayRunDialog } from "@/components/post-pay-run-dialog";
 import { BulkFinaliseDialog } from "@/components/bulk-finalise-dialog";
+import { UnfinalisePayRunDialog } from "@/components/unfinalise-pay-run-dialog";
+import { UnfinalisePayslipsDialog } from "@/components/unfinalise-payslips-dialog";
+import { PayRunExportButton } from "@/components/pay-run-export-button";
 import { supabase } from "@/lib/supabase";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -100,9 +103,18 @@ function PayRunsOverview({ payRuns, counts, onSelect }) {
   );
 }
 
+// Two Weekly is the only hourly frequency (same "two weekly" substring match
+// used throughout the app - see lib/pay-run-periods.js, hourly-hours-list.jsx).
+// Monthly frequencies (Pay Run 15, Month End) are salaried - nothing to
+// capture, so their payslips should always count as ready regardless of
+// normal_hours.
+function isHourlyFrequency(frequencyName) {
+  return (frequencyName ?? "").toLowerCase().includes("two weekly");
+}
+
 function PayslipsContent() {
   const [payRuns, setPayRuns] = useState(null);
-  const [counts, setCounts] = useState(new Map());
+  const [payslips, setPayslips] = useState(null);
   const [payRunId, setPayRunId] = useState(null);
   const [error, setError] = useState("");
   const [selectedEmployee, setSelectedEmployee] = useState(null);
@@ -124,42 +136,54 @@ function PayslipsContent() {
       });
   }, []);
 
-  const fetchCounts = useCallback(() => {
-    // Total/Captured/Finalised counts per pay run - computed client-side from
-    // a single lightweight query rather than a DB view, since volumes here
-    // are small (a few hundred payslips total). Best-effort: a failure here
-    // shouldn't block the page, the run list still works without the count
-    // columns.
+  const fetchPayslips = useCallback(() => {
+    // Raw per-payslip rows, not pre-reduced into counts - counts need each
+    // row's pay run frequency too (see isHourlyFrequency), which only
+    // `payRuns` knows, so the reduction happens in the counts useMemo below
+    // once both queries have landed. Best-effort: a failure here shouldn't
+    // block the page, the run list still works without the count columns.
     supabase
       .from("payslips")
       .select("pay_run_id, finalised_at, normal_hours")
       .then(({ data, error }) => {
         if (error) return;
-        const map = new Map();
-        for (const row of data ?? []) {
-          const entry = map.get(row.pay_run_id) ?? { total: 0, finalised: 0, captured: 0 };
-          entry.total += 1;
-          if (row.finalised_at) entry.finalised += 1;
-          // Client-confirmed rule (2026-09-02): 0 hours only means "worked
-          // nothing" once finalised - before that it's indistinguishable from
-          // "not captured yet" (the seeded default), so it doesn't count
-          // toward Captured. A payslip with no hours concept at all
-          // (normal_hours null - salaried, non-hourly frequencies) has
-          // nothing to capture, so it always counts. Finalising with 0 is
-          // still allowed and correctable later (unfinalise + fix) - this
-          // count is purely a pre-finalisation audit aid, not a gate.
-          const captured = row.finalised_at || row.normal_hours === null || Number(row.normal_hours) !== 0;
-          if (captured) entry.captured += 1;
-          map.set(row.pay_run_id, entry);
-        }
-        setCounts(map);
+        setPayslips(data ?? []);
       });
   }, []);
 
   useEffect(() => {
     fetchPayRuns();
-    fetchCounts();
-  }, [fetchPayRuns, fetchCounts]);
+    fetchPayslips();
+  }, [fetchPayRuns, fetchPayslips]);
+
+  // Total/Captured/Finalised counts per pay run. Client-side, not a DB view,
+  // since volumes here are small (a few hundred payslips total).
+  const counts = useMemo(() => {
+    const map = new Map();
+    if (!payRuns || !payslips) return map;
+    const frequencyByRunId = new Map(payRuns.map((run) => [run.id, run.pay_frequencies?.name]));
+    for (const row of payslips) {
+      const entry = map.get(row.pay_run_id) ?? { total: 0, finalised: 0, captured: 0 };
+      entry.total += 1;
+      if (row.finalised_at) entry.finalised += 1;
+      // Client-confirmed rule (2026-09-02): 0 hours only means "worked
+      // nothing" once finalised - before that it's indistinguishable from
+      // "not captured yet" (the seeded default), so it doesn't count toward
+      // Captured. Salaried payslips (Pay Run 15 / Month End) have nothing to
+      // capture, so they always count - keyed off the pay run's frequency
+      // (2026-10-04 fix), not normal_hours === null: old imported salaried
+      // payslips store normal_hours as 0.00 rather than null, so checking
+      // the value alone misread them as "not captured" even though there
+      // was never anything to capture. Finalising with 0 is still allowed
+      // and correctable later via unfinalise - this count is purely a
+      // pre-finalisation audit aid, not a gate.
+      const frequencyName = frequencyByRunId.get(row.pay_run_id);
+      const captured = row.finalised_at || !isHourlyFrequency(frequencyName) || Number(row.normal_hours) !== 0;
+      if (captured) entry.captured += 1;
+      map.set(row.pay_run_id, entry);
+    }
+    return map;
+  }, [payRuns, payslips]);
 
   const selectedRun = payRuns?.find((run) => run.id === payRunId);
 
@@ -228,11 +252,31 @@ function PayslipsContent() {
           <Badge variant={selectedRun.status === "finalised" ? "default" : "secondary"}>
             {selectedRun.status === "finalised" ? "Finalised" : "Draft"}
           </Badge>
+          <PayRunExportButton
+            payRunId={selectedRun.id}
+            periodLabel={`${selectedRun.period_start}_to_${selectedRun.period_end}`}
+          />
+          {selectedRun.status === "finalised" && (
+            <UnfinalisePayRunDialog
+              payRun={selectedRun}
+              onUnfinalised={() => {
+                fetchPayRuns();
+              }}
+            />
+          )}
           {selectedRun.status !== "finalised" && (
             <BulkFinaliseDialog
               payRunId={selectedRun.id}
               onFinalised={() => {
-                fetchCounts();
+                fetchPayslips();
+              }}
+            />
+          )}
+          {selectedRun.status !== "finalised" && finalisedCount !== null && finalisedCount > 0 && (
+            <UnfinalisePayslipsDialog
+              payRunId={selectedRun.id}
+              onUnfinalised={() => {
+                fetchPayslips();
               }}
             />
           )}
@@ -241,7 +285,7 @@ function PayslipsContent() {
               currentRun={selectedRun}
               onPosted={(newRunId) => {
                 fetchPayRuns();
-                fetchCounts();
+                fetchPayslips();
                 setPayRunId(newRunId);
               }}
             />
