@@ -58,6 +58,7 @@ function PayRunsOverview({ payRuns, counts, onSelect }) {
                 <TableHead>Period</TableHead>
                 <TableHead>Pay date</TableHead>
                 <TableHead>Total</TableHead>
+                <TableHead>Captured</TableHead>
                 <TableHead>Finalised</TableHead>
                 <TableHead>Pending</TableHead>
                 <TableHead />
@@ -65,13 +66,20 @@ function PayRunsOverview({ payRuns, counts, onSelect }) {
             </TableHeader>
             <TableBody>
               {runs.map((run) => {
-                const c = counts.get(run.id) ?? { total: 0, finalised: 0 };
+                const c = counts.get(run.id) ?? { total: 0, finalised: 0, captured: 0 };
                 const pending = c.total - c.finalised;
                 return (
                   <TableRow key={run.id}>
                     <TableCell>{payRunLabel(run)}</TableCell>
                     <TableCell>{formatDate(run.pay_date)}</TableCell>
                     <TableCell>{c.total}</TableCell>
+                    <TableCell>
+                      {c.captured < c.total ? (
+                        <Badge variant="outline">{c.captured} / {c.total}</Badge>
+                      ) : (
+                        c.captured
+                      )}
+                    </TableCell>
                     <TableCell>{c.finalised}</TableCell>
                     <TableCell>
                       {pending > 0 ? <Badge variant="secondary">{pending}</Badge> : pending}
@@ -117,20 +125,31 @@ function PayslipsContent() {
   }, []);
 
   const fetchCounts = useCallback(() => {
-    // Total/Finalised counts per pay run - computed client-side from a single
-    // lightweight query rather than a DB view, since volumes here are small
-    // (a few hundred payslips total). Best-effort: a failure here shouldn't
-    // block the page, the run list still works without the count columns.
+    // Total/Captured/Finalised counts per pay run - computed client-side from
+    // a single lightweight query rather than a DB view, since volumes here
+    // are small (a few hundred payslips total). Best-effort: a failure here
+    // shouldn't block the page, the run list still works without the count
+    // columns.
     supabase
       .from("payslips")
-      .select("pay_run_id, finalised_at")
+      .select("pay_run_id, finalised_at, normal_hours")
       .then(({ data, error }) => {
         if (error) return;
         const map = new Map();
         for (const row of data ?? []) {
-          const entry = map.get(row.pay_run_id) ?? { total: 0, finalised: 0 };
+          const entry = map.get(row.pay_run_id) ?? { total: 0, finalised: 0, captured: 0 };
           entry.total += 1;
           if (row.finalised_at) entry.finalised += 1;
+          // Client-confirmed rule (2026-09-02): 0 hours only means "worked
+          // nothing" once finalised - before that it's indistinguishable from
+          // "not captured yet" (the seeded default), so it doesn't count
+          // toward Captured. A payslip with no hours concept at all
+          // (normal_hours null - salaried, non-hourly frequencies) has
+          // nothing to capture, so it always counts. Finalising with 0 is
+          // still allowed and correctable later (unfinalise + fix) - this
+          // count is purely a pre-finalisation audit aid, not a gate.
+          const captured = row.finalised_at || row.normal_hours === null || Number(row.normal_hours) !== 0;
+          if (captured) entry.captured += 1;
           map.set(row.pay_run_id, entry);
         }
         setCounts(map);
