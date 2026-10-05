@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { recalculatePayslip } from "@/lib/payslip-calculator";
+import { logAudit } from "@/lib/audit";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -66,6 +67,7 @@ export function HourlyHoursList({ payRunId, periodStart, periodEnd, editable = f
   const [basicHourlyPayItemId, setBasicHourlyPayItemId] = useState(null);
   const [frequencyName, setFrequencyName] = useState(null);
   const [calcWarnings, setCalcWarnings] = useState([]);
+  const [recalcBusy, setRecalcBusy] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -140,12 +142,23 @@ export function HourlyHoursList({ payRunId, periodStart, periodEnd, editable = f
         setBasicHourlyPayItemId(payItem.id);
       }
 
+    }
+
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [payRunId, periodStart, periodEnd]);
+
+  async function recalculateAll() {
+    setCalcWarnings([]);
+    setRecalcBusy(true);
       // Reconcile rate for payslips that don't already match the employee's
       // current BASIC_HOURLY regular input - covers both a payslip created
       // before any rate existed (normal_rate null) and a same-period rate
       // correction (see below). Skips finalised payslips - those are locked,
       // same rule as hours editing.
-      const candidates = merged.filter((row) => row.payslip && !row.payslip.finalised_at);
+      const candidates = rows.filter((row) => row.payslip && !row.payslip.finalised_at);
       const ratePatches = [];
       if (candidates.length > 0 && periodStart && periodEnd) {
         const { data: regularInputs } = await supabase
@@ -153,7 +166,7 @@ export function HourlyHoursList({ payRunId, periodStart, periodEnd, editable = f
           .select("employee_number, amount, effective_from, effective_to, created_at, pay_items(code)")
           .in("employee_number", candidates.map((row) => row.employee_number));
 
-        if (!cancelled && regularInputs) {
+        if (regularInputs) {
           // Corrections are inserted as a new row rather than editing the
           // old one (the documented "raise = new row" rule), so more than
           // one row can legitimately cover the same period for the same
@@ -187,13 +200,13 @@ export function HourlyHoursList({ payRunId, periodStart, periodEnd, editable = f
               .eq("id", row.payslip.id);
             if (!syncError) {
               ratePatches.push({ payslipId: row.payslip.id, normal_rate: rate, gross_remuneration: grossRemuneration });
-              if (payItem && grossRemuneration != null) {
+              if (basicHourlyPayItemId && grossRemuneration != null) {
                 const { data: hourlyLine } = await supabase
                   .from("payslip_lines")
                   .select("id")
                   .eq("pay_run_id", payRunId)
                   .eq("employee_number", row.employee_number)
-                  .eq("pay_item_id", payItem.id)
+                  .eq("pay_item_id", basicHourlyPayItemId)
                   .maybeSingle();
                 if (hourlyLine) {
                   await supabase.from("payslip_lines").update({ amount: grossRemuneration }).eq("id", hourlyLine.id);
@@ -201,7 +214,7 @@ export function HourlyHoursList({ payRunId, periodStart, periodEnd, editable = f
                   await supabase.from("payslip_lines").insert({
                     pay_run_id: payRunId,
                     employee_number: row.employee_number,
-                    pay_item_id: payItem.id,
+                    pay_item_id: basicHourlyPayItemId,
                     amount: grossRemuneration,
                   });
                 }
@@ -209,7 +222,7 @@ export function HourlyHoursList({ payRunId, periodStart, periodEnd, editable = f
             }
           }
 
-          if (!cancelled && ratePatches.length > 0) {
+          if (ratePatches.length > 0) {
             const patchById = new Map(ratePatches.map((p) => [p.payslipId, p]));
             setRows((prev) =>
               prev.map((r) => {
@@ -227,7 +240,6 @@ export function HourlyHoursList({ payRunId, periodStart, periodEnd, editable = f
       // has a gross amount - matches SimplePay's own "recalculate as you go"
       // behaviour, and self-heals payslips saved before this feature existed
       // (same reconcile-on-load pattern as the rate fix above). Not gated on
-      // `cancelled` per-iteration since these are independent background
       // writes, not state updates this component reads back.
       if (frequency.name) {
         const patchedGross = new Map(ratePatches.map((p) => [p.payslipId, p.gross_remuneration]));
@@ -249,7 +261,7 @@ export function HourlyHoursList({ payRunId, periodStart, periodEnd, editable = f
             })
         );
 
-        if (!cancelled) {
+        {
           const messages = [
             ...new Set(
               results
@@ -260,13 +272,16 @@ export function HourlyHoursList({ payRunId, periodStart, periodEnd, editable = f
           setCalcWarnings(messages);
         }
       }
-    }
 
-    run();
-    return () => {
-      cancelled = true;
-    };
-  }, [payRunId, periodStart, periodEnd]);
+    await logAudit({
+      action: "recalculate_payslips",
+      entity: "pay_run",
+      entityId: payRunId,
+      payRunId,
+      details: { payslips: rows.filter((r) => r.payslip && !r.payslip.finalised_at).length },
+    });
+    setRecalcBusy(false);
+  }
 
   function editState(payslip) {
     return (
@@ -390,6 +405,11 @@ export function HourlyHoursList({ payRunId, periodStart, periodEnd, editable = f
 
   return (
     <div className="space-y-3">
+      <div className="flex justify-end">
+        <Button size="sm" variant="outline" onClick={recalculateAll} disabled={recalcBusy}>
+          {recalcBusy ? "Recalculating…" : "Recalculate payslips"}
+        </Button>
+      </div>
       {calcWarnings.length > 0 && (
         <div className="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
           <p className="mb-1 font-medium">Nett Pay could not be fully calculated for some employees:</p>

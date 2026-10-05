@@ -38,7 +38,7 @@ $$;
 create or replace function payroll.log_app_event(p_action text, p_entity text, p_entity_id text, p_pay_run_id uuid, p_employee_number text, p_details jsonb)
 returns void language plpgsql security definer set search_path = payroll as $$
 begin
-  if p_action not in ('sign_in','sign_out','access_refused','export_csv','export_xero','export_eft','print_payslip','report_generated') then
+  if p_action not in ('sign_in','sign_out','access_refused','export_csv','export_xero','export_eft','print_payslip','report_generated','recalculate_payslips') then
     raise exception 'Unknown audit action: %', p_action;
   end if;
   insert into payroll.audit_log (action, entity, entity_id, pay_run_id, employee_number, details)
