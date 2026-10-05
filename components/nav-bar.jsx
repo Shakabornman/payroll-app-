@@ -13,6 +13,7 @@ const NAV_ITEMS = [
   { href: "/reports", label: "Statutory reports" },
   { href: "/exports", label: "Exports" },
   { href: "/employees", label: "Employees" },
+  { href: "/audit", label: "Audit trail" },
 ];
 
 export function NavBar() {

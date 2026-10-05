@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { logAudit } from "@/lib/audit";
 import { Button } from "@/components/ui/button";
 
 function csvCell(value) {
@@ -80,6 +81,7 @@ export function PayRunExportButton({ payRunId, periodLabel }) {
     link.download = `pay-run-${periodLabel}.csv`;
     link.click();
     URL.revokeObjectURL(url);
+    await logAudit({ action: "export_csv", entity: "pay_run", entityId: payRunId, payRunId, details: { rows: (payslips ?? []).length, file: link.download } });
     setBusy(false);
   }
 

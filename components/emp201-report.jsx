@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { logAudit } from "@/lib/audit";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -81,6 +82,7 @@ export function Emp201Report() {
     const payroll = paye + sdl + uif;
 
     setResult({ start, end, paye, sdl, uif, payroll, runCount: runIds.length });
+    await logAudit({ action: "report_generated", entity: "emp201", entityId: month, details: { month, payroll, runs: runIds.length } });
     setBusy(false);
   }
 

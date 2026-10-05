@@ -235,6 +235,16 @@ export function EmployeePayslipDetail({ employee, payRunId }) {
       <Card>
         <CardHeader>
           <CardTitle>Payslip breakdown</CardTitle>
+          <CardAction className="flex gap-2">
+            <a
+              href={`/payslip-print/${payRunId}/${employeeNumber}`}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex h-8 items-center rounded-lg border px-3 text-sm hover:bg-muted"
+            >
+              Print payslip
+            </a>
+          </CardAction>
           {run && !run.finalised_at && (
             <CardAction>
               <AddPayslipLineDialog

@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { NavBar } from "@/components/nav-bar";
+import { logAudit } from "@/lib/audit";
 
 export function ProtectedRoute({ children }) {
   const { user, authorized, loading } = useAuth();
@@ -14,6 +15,13 @@ export function ProtectedRoute({ children }) {
       router.replace("/login");
     }
   }, [loading, user, router]);
+
+  useEffect(() => {
+    if (loading || !user || authorized) return;
+    if (sessionStorage.getItem("access_refused_logged") === user.uid) return;
+    sessionStorage.setItem("access_refused_logged", user.uid);
+    logAudit({ action: "access_refused", entity: "payroll_app", details: { path: window.location.pathname } });
+  }, [loading, user, authorized]);
 
   if (loading || !user) {
     return (

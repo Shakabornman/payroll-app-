@@ -9,6 +9,8 @@ import { BulkFinaliseDialog } from "@/components/bulk-finalise-dialog";
 import { UnfinalisePayRunDialog } from "@/components/unfinalise-pay-run-dialog";
 import { UnfinalisePayslipsDialog } from "@/components/unfinalise-payslips-dialog";
 import { PayRunExportButton } from "@/components/pay-run-export-button";
+import { PayRunXeroExportButton } from "@/components/pay-run-xero-export-button";
+import { PayRunEftExportButton } from "@/components/pay-run-eft-export-button";
 import { supabase } from "@/lib/supabase";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -253,6 +255,16 @@ function PayslipsContent() {
             {selectedRun.status === "finalised" ? "Finalised" : "Draft"}
           </Badge>
           <PayRunExportButton
+            payRunId={selectedRun.id}
+            periodLabel={`${selectedRun.period_start}_to_${selectedRun.period_end}`}
+          />
+          <PayRunXeroExportButton
+            payRunId={selectedRun.id}
+            payDate={selectedRun.pay_date}
+            frequencyName={selectedRun.pay_frequencies?.name}
+            periodLabel={`${selectedRun.period_start}_to_${selectedRun.period_end}`}
+          />
+          <PayRunEftExportButton
             payRunId={selectedRun.id}
             periodLabel={`${selectedRun.period_start}_to_${selectedRun.period_end}`}
           />

@@ -187,6 +187,25 @@ export function HourlyHoursList({ payRunId, periodStart, periodEnd, editable = f
               .eq("id", row.payslip.id);
             if (!syncError) {
               ratePatches.push({ payslipId: row.payslip.id, normal_rate: rate, gross_remuneration: grossRemuneration });
+              if (payItem && grossRemuneration != null) {
+                const { data: hourlyLine } = await supabase
+                  .from("payslip_lines")
+                  .select("id")
+                  .eq("pay_run_id", payRunId)
+                  .eq("employee_number", row.employee_number)
+                  .eq("pay_item_id", payItem.id)
+                  .maybeSingle();
+                if (hourlyLine) {
+                  await supabase.from("payslip_lines").update({ amount: grossRemuneration }).eq("id", hourlyLine.id);
+                } else {
+                  await supabase.from("payslip_lines").insert({
+                    pay_run_id: payRunId,
+                    employee_number: row.employee_number,
+                    pay_item_id: payItem.id,
+                    amount: grossRemuneration,
+                  });
+                }
+              }
             }
           }
 

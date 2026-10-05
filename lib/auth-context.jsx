@@ -8,6 +8,7 @@ import {
 } from "firebase/auth";
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
+import { logAudit } from "@/lib/audit";
 
 const AuthContext = createContext(undefined);
 
@@ -48,8 +49,15 @@ export function AuthProvider({ children }) {
     return unsubscribe;
   }, []);
 
-  const signIn = (email, password) => signInWithEmailAndPassword(auth, email, password);
-  const signOut = () => firebaseSignOut(auth);
+  const signIn = async (email, password) => {
+    const credential = await signInWithEmailAndPassword(auth, email, password);
+    await logAudit({ action: "sign_in" });
+    return credential;
+  };
+  const signOut = async () => {
+    await logAudit({ action: "sign_out" });
+    return firebaseSignOut(auth);
+  };
 
   const loading = !authResolved || (Boolean(user) && !accessChecked);
   const authorized = Boolean(user && employee);
