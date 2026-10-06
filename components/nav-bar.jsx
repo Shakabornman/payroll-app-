@@ -21,7 +21,7 @@ export function NavBar() {
   const { user, signOut } = useAuth();
 
   return (
-    <header className="border-b bg-card">
+    <header className="print:hidden border-b bg-card">
       <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3">
         <span className="text-sm font-semibold">HAE HR Payroll</span>
         <nav className="flex flex-wrap gap-1">
