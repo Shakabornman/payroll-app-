@@ -1,0 +1,429 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── EMPLOYEES ─────────────────────────────────────────────────────────────
+    // Changed 2026-10-06: employee records hold banking details and ID numbers,
+    // so they are no longer readable by every signed-in user.
+    //   - Read: executive, payroll_admin, hr and finance can read every record.
+    //           Anyone else can read only their own record (matched on their
+    //           sign-in email), which keeps the "is this person staff?" check
+    //           working for ordinary staff.
+    //   - Write: unchanged (executive, hr, finance).
+    match /employees/{employeeId} {
+      allow read: if request.auth != null && (
+        get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevels.hasAny(['executive', 'payroll_admin', 'hr', 'finance']) ||
+        resource.data.email == request.auth.token.email
+      );
+      allow write: if request.auth != null &&
+        get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevels.hasAny(['executive', 'hr', 'finance']);
+    }
+
+    // ── HR DOCUMENTS ──────────────────────────────────────────────────────────
+    match /hr_documents/{docId} {
+      allow read: if request.auth != null && (
+        get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevels.hasAny(['executive', 'hr', 'finance']) ||
+        resource.data.employeeNumber == get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.employeeNumber
+      );
+      allow write: if request.auth != null &&
+        get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevels.hasAny(['executive', 'hr']);
+    }
+
+    // ── DAILY REPORTS ─────────────────────────────────────────────────────────
+    match /daily_reports/{reportId} {
+      allow read, update, delete: if request.auth != null &&
+        get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevels.hasAny(['executive', 'hr', 'finance']);
+      allow create: if request.auth != null &&
+        get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevels.size() > 0;
+    }
+
+    // ── MOTIVATIONS ───────────────────────────────────────────────────────────
+    match /motivations/{motivationId} {
+      allow read, create, update, delete: if request.auth != null &&
+        get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevels.hasAny(['executive', 'finance', 'billing', 'casem']);
+    }
+
+    // ── STOCK ORDERS (kitchen/support — NOT pharmacy) ─────────────────────────
+    match /stock_orders/{orderId} {
+      allow read, update, delete: if request.auth != null &&
+        get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevels.hasAny(['executive', 'finance']);
+      allow create: if request.auth != null &&
+        get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevels.hasAny(['executive', 'finance', 'nursing', 'support']);
+    }
+
+    // ── SCORECARD ─────────────────────────────────────────────────────────────
+    match /submissions/{docId} {
+      allow read: if request.auth != null &&
+        request.auth.token.email == 'shakabornman@gmail.com';
+      allow create, update: if request.auth != null;
+    }
+
+    match /weeklyRollups/{weekEnding}/{document=**} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null &&
+        request.auth.token.email == 'shakabornman@gmail.com';
+    }
+
+    match /hospitalWeeklySummary/{weekEnding} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null &&
+        request.auth.token.email == 'shakabornman@gmail.com';
+    }
+
+    // ── RISK MANAGEMENT ───────────────────────────────────────────────────────
+    match /risks/{riskId} {
+      allow read, update, delete: if request.auth != null &&
+        get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevels.hasAny(['executive', 'hr', 'finance']);
+      allow create: if request.auth != null &&
+        get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevels.size() > 0;
+    }
+
+    match /risks/{riskId}/audit/{eventId} {
+      allow read, create: if request.auth != null &&
+        get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevels.size() > 0;
+      allow update, delete: if false;
+    }
+
+    // ── COUNTERS ──────────────────────────────────────────────────────────────
+    match /counters/{counterId} {
+      allow read:  if request.auth != null;
+      allow write: if request.auth != null;
+    }
+
+    // ── TIMESHEETS ────────────────────────────────────────────────────────────
+    match /timesheets/{timesheetId} {
+      allow read: if request.auth != null && (
+        request.auth.token.email == 'shakabornman@gmail.com' ||
+        request.auth.token.email == 'aphentela@gmail.com' ||
+        request.auth.token.email == 'carleenphentela@icloud.com'
+      );
+      allow write: if request.auth != null && (
+        request.auth.token.email == 'shakabornman@gmail.com' ||
+        request.auth.token.email == 'aphentela@gmail.com' ||
+        request.auth.token.email == 'carleenphentela@icloud.com'
+      );
+    }
+
+    // ── ACCESS CONTROL ────────────────────────────────────────────────────────
+    match /access_control/{uid} {
+      allow read:  if request.auth != null && request.auth.uid == uid;
+      allow write: if false;
+    }
+
+    // ── POLICIES & PROCEDURES ─────────────────────────────────────────────────
+    match /pp_documents/{docId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null &&
+        get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevel == 'executive';
+    }
+
+    match /pp_archive/{docId} {
+      allow read, write: if request.auth != null &&
+        get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevel == 'executive';
+    }
+
+    // ── DISCIPLINARY ──────────────────────────────────────────────────────────
+    // HR and Executive only — no staff access to disciplinary records
+    match /disciplinary_cases/{caseId} {
+      allow read, write: if request.auth != null &&
+        get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevels.hasAny(['executive', 'hr']);
+
+      match /events/{eventId} {
+        allow read, write: if request.auth != null &&
+          get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevels.hasAny(['executive', 'hr']);
+      }
+    }
+
+    match /disciplinary_documents/{docId} {
+      allow read, write: if request.auth != null &&
+        get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevels.hasAny(['executive', 'hr']);
+    }
+
+    // ── HAE PHARMACY MODULE ───────────────────────────────────────────────────
+    // Access tiers: executive = full | finance = create/operate | nursing = request only
+    // All rules use access_control/{uid} — no custom claims, no hardcoded emails
+
+    match /pharmacy_products/{id} {
+      allow read: if request.auth != null &&
+        get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevels.hasAny(['nursing', 'finance', 'executive']);
+      allow create: if request.auth != null &&
+        get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevels.hasAny(['executive']);
+      allow update: if request.auth != null &&
+        get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevels.hasAny(['finance', 'executive']);
+      allow delete: if request.auth != null &&
+        get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevels.hasAny(['executive']);
+    }
+
+    match /pharmacy_suppliers/{id} {
+      allow read: if request.auth != null &&
+        get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevels.hasAny(['nursing', 'finance', 'executive']);
+      allow write: if request.auth != null &&
+        get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevels.hasAny(['executive']);
+    }
+
+    match /pharmacy_requests/{id} {
+      allow read: if request.auth != null && (
+        get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevels.hasAny(['finance', 'executive']) ||
+        (get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevels.hasAny(['nursing']) &&
+         resource.data.requestedByUid == request.auth.uid)
+      );
+      allow create: if request.auth != null &&
+        get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevels.hasAny(['nursing', 'finance', 'executive']);
+      allow update: if request.auth != null &&
+        get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevels.hasAny(['finance', 'executive']);
+      allow delete: if request.auth != null && (
+        get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevels.hasAny(['executive']) ||
+        (resource.data.requestedByUid == request.auth.uid && resource.data.status == 'pending')
+      );
+    }
+
+    match /pharmacy_orders/{id} {
+      allow read: if request.auth != null &&
+        get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevels.hasAny(['nursing', 'finance', 'executive']);
+      allow create: if request.auth != null &&
+        get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevels.hasAny(['finance', 'executive']);
+      allow update: if request.auth != null &&
+        get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevels.hasAny(['finance', 'executive']);
+      allow delete: if request.auth != null &&
+        get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevels.hasAny(['executive']);
+    }
+
+    match /pharmacy_order_lines/{id} {
+      allow read: if request.auth != null &&
+        get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevels.hasAny(['nursing', 'finance', 'executive']);
+      allow create: if request.auth != null &&
+        get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevels.hasAny(['finance', 'executive']);
+      allow update: if request.auth != null &&
+        get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevels.hasAny(['finance', 'executive']);
+      allow delete: if request.auth != null &&
+        get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevels.hasAny(['executive']);
+    }
+
+    match /pharmacy_invoices/{id} {
+      allow read: if request.auth != null &&
+        get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevels.hasAny(['finance', 'executive']);
+      allow create: if request.auth != null &&
+        get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevels.hasAny(['finance', 'executive']);
+      allow update: if request.auth != null &&
+        get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevels.hasAny(['finance', 'executive']);
+      allow delete: if request.auth != null &&
+        get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevels.hasAny(['executive']);
+    }
+
+    match /pharmacy_invoice_lines/{id} {
+      allow read: if request.auth != null &&
+        get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevels.hasAny(['finance', 'executive']);
+      allow create: if request.auth != null &&
+        get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevels.hasAny(['finance', 'executive']);
+      allow update: if request.auth != null &&
+        get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevels.hasAny(['finance', 'executive']);
+      allow delete: if request.auth != null &&
+        get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevels.hasAny(['executive']);
+    }
+
+    match /pharmacy_trifour/{id} {
+      allow read: if request.auth != null &&
+        get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevels.hasAny(['finance', 'executive']);
+      allow create: if request.auth != null &&
+        get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevels.hasAny(['finance', 'executive']);
+      allow update: if request.auth != null &&
+        get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevels.hasAny(['finance', 'executive']);
+      allow delete: if request.auth != null &&
+        get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevels.hasAny(['executive']);
+    }
+
+    match /pharmacy_trifour/{id}/lines/{lineId} {
+      allow read: if request.auth != null &&
+        get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevels.hasAny(['finance', 'executive']);
+      allow write: if request.auth != null &&
+        get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevels.hasAny(['finance', 'executive']);
+    }
+
+    match /pharmacy_doctors/{id} {
+      allow read: if request.auth != null &&
+        get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevels.hasAny(['nursing', 'finance', 'executive']);
+      allow create: if request.auth != null &&
+        get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevels.hasAny(['executive']);
+      allow update: if request.auth != null &&
+        get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevels.hasAny(['finance', 'executive']);
+      allow delete: if request.auth != null &&
+        get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevels.hasAny(['executive']);
+    }
+
+    // ── SHARE REGISTER ────────────────────────────────────────────────────────
+    // Executive and Board only — legal share ownership records.
+    match /companies/{companyId} {
+      allow read: if request.auth != null &&
+        get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevels.hasAny(['executive', 'board']);
+      allow write: if request.auth != null &&
+        get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevels.hasAny(['executive', 'board']);
+    }
+
+    match /shareRegister/{entryId} {
+      allow read, create, update: if request.auth != null &&
+        get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevels.hasAny(['executive', 'board']);
+      // No delete — entries move to status "transferred" instead, so the
+      // audit trail below always has a live document to point back to.
+      allow delete: if false;
+    }
+
+    match /shareRegisterAudit/{logId} {
+      allow read, create: if request.auth != null &&
+        get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevels.hasAny(['executive', 'board']);
+      allow update, delete: if false;
+    }
+
+    match /shareTransactions/{transactionId} {
+      allow read: if request.auth != null &&
+        get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevels.hasAny(['executive', 'board']);
+      allow create: if request.auth != null &&
+        get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevels.hasAny(['executive', 'board']);
+      // Transaction records are a permanent legal log of a sale/cancellation/reissue
+      // event — never edited or removed once written.
+      allow update, delete: if false;
+    }
+
+    // ── BOARD DOCUMENT LIBRARY ────────────────────────────────────────────────
+    // Executive and Board only — Notices, Agendas, Minutes, Resolutions.
+    // Superseded documents are never deleted: the original is flagged
+    // status:"superseded" and a permanent copy is written to the archive
+    // collection below, mirroring the Share Register's transaction-log pattern.
+    match /board_documents/{docId} {
+      allow read, create, update: if request.auth != null &&
+        get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevels.hasAny(['executive', 'board']);
+      allow delete: if false;
+    }
+
+    match /board_documents_archive/{docId} {
+      allow read, create: if request.auth != null &&
+        get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevels.hasAny(['executive', 'board']);
+      // Permanent record of superseded documents — never edited or removed once written.
+      allow update, delete: if false;
+    }
+
+    match /{path=**}/lines/{lineId} {
+      allow read: if request.auth != null &&
+        get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevels.hasAny(['finance', 'executive']);
+    }
+
+    // ── OHSC COMPLIANCE MODULE ────────────────────────────────────────────────
+    // Phase 1: Cleaning Services, Infection Prevention & Control, Waste
+    // Management (all under department "Support Services", access tag
+    // 'ohsc-support') and Food Services (department "Kitchen", access tag
+    // 'ohsc-kitchen'). Executive sees and does everything, as elsewhere.
+    //
+    // These two access tags need to be added manually to the accessLevels
+    // array on the relevant people's access_control/{uid} documents — the
+    // Support Manager gets 'ohsc-support', the Kitchen lead gets
+    // 'ohsc-kitchen' — same as how 'nursing'/'finance'/'board' etc. are
+    // assigned elsewhere in this file. No code change needed for that part.
+    //
+    // Later phases add more departments (Nursing, Admin & Facilities,
+    // Clinical Support) — each will need its own tag (e.g. 'ohsc-nursing')
+    // added to the hasAny() lists below when that phase goes live.
+
+    match /ohscDomains/{domainId} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+
+    match /ohscTools/{toolId} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+
+    match /ohscCriteria/{ref} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+
+    // Append-only audit log. No update or delete — ever, including for
+    // executive. A wrong entry gets corrected with a new entry, not by
+    // editing history.
+    match /ohscAssessments/{assessmentId} {
+      allow read: if request.auth != null && (
+        get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevels.hasAny(['executive']) ||
+        (resource.data.department == 'Support Services' &&
+         get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevels.hasAny(['ohsc-support'])) ||
+        (resource.data.department == 'Kitchen' &&
+         get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevels.hasAny(['ohsc-kitchen']))
+      );
+
+      allow create: if request.auth != null &&
+        request.resource.data.assessedByUid == request.auth.uid &&
+        request.resource.data.department ==
+          get(/databases/$(database)/documents/ohscCriteria/$(request.resource.data.criterionRef)).data.department &&
+        (
+          get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevels.hasAny(['executive']) ||
+          (request.resource.data.department == 'Support Services' &&
+           get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevels.hasAny(['ohsc-support'])) ||
+          (request.resource.data.department == 'Kitchen' &&
+           get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevels.hasAny(['ohsc-kitchen']))
+        );
+
+      allow update, delete: if false;
+    }
+
+    // Dashboard cache — written only by a Cloud Function via the Admin SDK,
+    // which bypasses these rules entirely. No client writes here directly.
+    match /ohscCurrentStatus/{ref} {
+      allow read: if request.auth != null && (
+        get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevels.hasAny(['executive']) ||
+        (resource.data.department == 'Support Services' &&
+         get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevels.hasAny(['ohsc-support'])) ||
+        (resource.data.department == 'Kitchen' &&
+         get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevels.hasAny(['ohsc-kitchen']))
+      );
+      allow write: if false;
+    }
+
+    // ── PUBLIC WEBSITE (hospitalekhaya.co.za) ─────────────────────────────────
+    // Collections are namespaced with the website_ prefix to keep them
+    // clearly separate from every other module above. Anyone (no auth) can
+    // submit an enquiry or appointment request, and anyone can read public
+    // announcements/downloads — but only staff with the 'website-admin' tag
+    // (added to their accessLevels array in access_control/{uid}, same
+    // mechanism as 'ohsc-support'/'ohsc-kitchen' above) can read submitted
+    // messages or manage site content. Executive has access automatically,
+    // consistent with every other module in this file.
+
+    match /website_contactMessages/{docId} {
+      allow create: if true;
+      allow read, update, delete: if request.auth != null &&
+        get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevels.hasAny(['executive', 'website-admin']);
+    }
+
+    match /website_appointmentRequests/{docId} {
+      allow create: if true;
+      allow read, update, delete: if request.auth != null &&
+        get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevels.hasAny(['executive', 'website-admin']);
+    }
+
+    match /website_announcements/{docId} {
+      allow read: if true;
+      allow write: if request.auth != null &&
+        get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevels.hasAny(['executive', 'website-admin']);
+    }
+
+    match /website_downloads/{docId} {
+      allow read: if true;
+      allow write: if request.auth != null &&
+        get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevels.hasAny(['executive', 'website-admin']);
+    }
+
+    match /website_gallery/{docId} {
+      allow read: if true;
+      allow write: if request.auth != null &&
+        get(/databases/$(database)/documents/access_control/$(request.auth.uid)).data.accessLevels.hasAny(['executive', 'website-admin']);
+    }
+
+    // ── CATCH-ALL — deny everything not explicitly listed above ──────────────
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+  }
+}
+
+// NOTE: Additional index needed in Firebase Console for Step 6:
+// pharmacy_orders: status (ASC) + updatedAt (DESC) — for recently actioned approvals query
