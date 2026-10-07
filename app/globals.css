@@ -29,6 +29,8 @@
   --color-brand-lime: var(--brand-lime);
   --color-brand-red: var(--brand-red);
   --color-brand-orange: var(--brand-orange);
+  --color-strip: var(--strip);
+  --color-strip-foreground: var(--strip-foreground);
   --color-warning: var(--warning);
   --color-warning-foreground: var(--warning-foreground);
   --color-input: var(--input);
@@ -84,6 +86,8 @@
   --brand-lime: oklch(0.745 0.170 123.7);
   --brand-red: oklch(0.561 0.229 27.7);
   --brand-orange: oklch(0.735 0.173 58.8);
+  --strip: oklch(0.362 0.136 14.1);
+  --strip-foreground: oklch(0.962 0.014 0.3);
   --warning: oklch(0.948 0.038 76.2);
   --warning-foreground: oklch(0.477 0.113 59.1);
   --radius: 0.625rem;
@@ -126,6 +130,8 @@
   --brand-lime: oklch(0.801 0.164 123.7);
   --brand-red: oklch(0.738 0.161 17.6);
   --brand-orange: oklch(0.801 0.148 64.6);
+  --strip: oklch(0.238 0.083 13.1);
+  --strip-foreground: oklch(0.962 0.014 0.3);
   --warning: oklch(0.287 0.052 73.4);
   --warning-foreground: oklch(0.821 0.137 67.4);
   --sidebar: oklch(0.238 0.021 190.6);
@@ -169,6 +175,8 @@
     --brand-lime: oklch(0.745 0.170 123.7);
     --brand-red: oklch(0.561 0.229 27.7);
     --brand-orange: oklch(0.735 0.173 58.8);
+    --strip: oklch(0.362 0.136 14.1);
+    --strip-foreground: oklch(0.962 0.014 0.3);
     --warning: oklch(0.948 0.038 76.2);
     --warning-foreground: oklch(0.477 0.113 59.1);
     --radius: 0.625rem;

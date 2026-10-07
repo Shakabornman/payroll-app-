@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { EkhayaConnectStrip } from "@/components/ekhaya-connect-strip";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
@@ -23,6 +24,8 @@ export function NavBar() {
   const { user, signOut } = useAuth();
 
   return (
+    <>
+    <EkhayaConnectStrip />
     <header className="print:hidden border-b bg-card">
       <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3">
         <Link href="/" className="flex items-center gap-2.5">
@@ -68,5 +71,6 @@ export function NavBar() {
         </div>
       </div>
     </header>
+    </>
   );
 }
