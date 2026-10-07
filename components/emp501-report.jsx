@@ -142,7 +142,7 @@ export function Emp501Report() {
             <p className="text-lg font-semibold">EMP501 Financial Particulars - Hospital AT Ekhaya</p>
             <p className="text-sm">Transaction year {taxYear} · Period of reconciliation {taxYear}02</p>
             <div className="mt-2">
-              <Badge variant="destructive">DRAFT</Badge>
+              <Badge variant="warning">DRAFT</Badge>
             </div>
           </div>
 

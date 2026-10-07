@@ -154,7 +154,7 @@ export function PayslipRunList({ payRunId, onSelectEmployee }) {
                 <TableCell>{row.job_title ?? "—"}</TableCell>
                 <TableCell>{formatMoney(row.nett_pay)}</TableCell>
                 <TableCell>
-                  <Badge variant={row.finalised_at ? "default" : "secondary"}>
+                  <Badge variant={row.finalised_at ? "success" : "warning"}>
                     {row.finalised_at ? "Finalised" : "Pending"}
                   </Badge>
                 </TableCell>

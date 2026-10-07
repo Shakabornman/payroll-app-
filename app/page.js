@@ -78,7 +78,7 @@ function CurrentPayPeriod() {
         </p>
         <p className="text-sm text-muted-foreground">Pay date {formatDate(payRun.pay_date)}</p>
       </div>
-      <Badge variant={payRun.status === "finalised" ? "default" : "secondary"}>
+      <Badge variant={payRun.status === "finalised" ? "success" : "warning"}>
         {payRun.status === "finalised" ? "Finalised" : "Draft"}
       </Badge>
     </div>

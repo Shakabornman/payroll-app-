@@ -146,7 +146,7 @@ export function UifDeclarationReport() {
             <p className="text-lg font-semibold">UIF Declaration - Hospital AT Ekhaya</p>
             <p className="text-sm">Period: {month}</p>
             <div className="mt-2">
-              <Badge variant="destructive">DRAFT</Badge>
+              <Badge variant="warning">DRAFT</Badge>
             </div>
           </div>
 

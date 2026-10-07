@@ -223,7 +223,7 @@ export function EmployeePayslipDetail({ employee, payRunId }) {
                   <p className="text-xs text-muted-foreground">Cost to company</p>
                   <p className="text-sm font-medium">{formatMoney(run.cost_to_company)}</p>
                 </div>
-                <Badge variant={run.finalised_at ? "default" : "secondary"}>
+                <Badge variant={run.finalised_at ? "success" : "warning"}>
                   {run.finalised_at ? `Finalised ${formatDate(run.finalised_at)}` : "Draft"}
                 </Badge>
               </div>

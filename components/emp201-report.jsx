@@ -120,7 +120,7 @@ export function Emp201Report() {
               Period: {formatDate(result.start)} to {formatDate(result.end)}
             </p>
             <div className="mt-2">
-              <Badge variant="destructive">DRAFT</Badge>
+              <Badge variant="warning">DRAFT</Badge>
             </div>
             <p className="print:hidden mt-2 text-xs text-muted-foreground">
               {result.runCount} pay run{result.runCount === 1 ? "" : "s"} with a pay date in this month
