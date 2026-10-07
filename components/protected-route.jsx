@@ -5,9 +5,10 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { NavBar } from "@/components/nav-bar";
 import { logAudit } from "@/lib/audit";
+import { Button } from "@/components/ui/button";
 
 export function ProtectedRoute({ children }) {
-  const { user, authorized, loading } = useAuth();
+  const { user, authorized, hasStaffRecord, loading, signOut } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
@@ -34,12 +35,16 @@ export function ProtectedRoute({ children }) {
   if (!authorized) {
     return (
       <div className="flex min-h-screen items-center justify-center px-4">
-        <div className="max-w-sm space-y-2 text-center">
+        <div className="max-w-sm space-y-3 text-center">
           <h1 className="text-lg font-semibold">Access not authorised</h1>
           <p className="text-sm text-muted-foreground">
-            Your account isn&apos;t linked to an HAE employee record. Contact
-            the COO to get access to the HR Payroll portal.
+            {hasStaffRecord
+              ? "Your account doesn't have access to HR Payroll. Contact the COO if you need it."
+              : "Your account isn't linked to an HAE employee record. Contact the COO to get access to the HR Payroll portal."}
           </p>
+          <Button variant="outline" size="sm" onClick={signOut}>
+            Sign out
+          </Button>
         </div>
       </div>
     );
