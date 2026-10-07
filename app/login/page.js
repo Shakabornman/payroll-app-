@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { Button } from "@/components/ui/button";
@@ -45,7 +46,16 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-4">
+    <div className="flex min-h-screen flex-col items-center justify-center gap-6 px-4">
+      <Image
+        src="/hae-logo.png"
+        alt="Hospital at Ekhaya. Your Health is Our Concern!"
+        width={720}
+        height={511}
+        unoptimized
+        preload
+        className="h-auto w-64 rounded-xl dark:bg-white dark:p-3"
+      />
       <Card className="w-full max-w-sm">
         <CardHeader>
           <CardTitle>HAE HR Payroll</CardTitle>

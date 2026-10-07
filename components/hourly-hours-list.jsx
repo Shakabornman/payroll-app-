@@ -485,7 +485,7 @@ export function HourlyHoursList({ payRunId, periodStart, periodEnd, editable = f
               <TableCell>{row.payslip ? formatMoney(row.payslip.gross_remuneration) : "—"}</TableCell>
               <TableCell>
                 {row.payslip ? (
-                  <Badge variant={row.payslip.finalised_at ? "default" : "secondary"}>
+                  <Badge variant={row.payslip.finalised_at ? "success" : "warning"}>
                     {row.payslip.finalised_at ? "Finalised" : "Draft"}
                   </Badge>
                 ) : (
@@ -506,7 +506,7 @@ export function HourlyHoursList({ payRunId, periodStart, periodEnd, editable = f
                       </Button>
                       {state.status === "saving" && <p className="text-xs text-muted-foreground">Saving…</p>}
                       {state.status === "saved" && (
-                        <p className="text-xs text-green-600 dark:text-green-400">Saved</p>
+                        <p className="text-xs text-primary">Saved</p>
                       )}
                       {state.status === "error" && <p className="text-xs text-destructive">{state.message}</p>}
                     </div>

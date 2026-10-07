@@ -202,7 +202,7 @@ export function EmployeeSelector({ onSelect }) {
                 <TableCell>{employee.job_title ?? "—"}</TableCell>
                 <TableCell>{employee.pay_points?.name ?? "—"}</TableCell>
                 <TableCell>
-                  <Badge variant={employee.is_active ? "default" : "secondary"}>
+                  <Badge variant={employee.is_active ? "success" : "secondary"}>
                     {employee.is_active ? "Active" : "Inactive"}
                   </Badge>
                 </TableCell>

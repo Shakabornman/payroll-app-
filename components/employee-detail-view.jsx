@@ -132,7 +132,7 @@ export function EmployeeDetailView({ employee, onBack }) {
                     <TableCell>{formatMoney(row.gross_remuneration)}</TableCell>
                     <TableCell>{formatMoney(row.nett_pay)}</TableCell>
                     <TableCell>
-                      <Badge variant={row.finalised_at ? "default" : "secondary"}>
+                      <Badge variant={row.finalised_at ? "success" : "warning"}>
                         {row.finalised_at ? "Finalised" : "Draft"}
                       </Badge>
                     </TableCell>

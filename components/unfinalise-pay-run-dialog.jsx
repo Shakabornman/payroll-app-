@@ -100,7 +100,7 @@ export function UnfinalisePayRunDialog({ payRun, onUnfinalised }) {
             Once it&apos;s back to draft, individual payslips inside it can be unfinalised too.
           </p>
           {nextRunExists && (
-            <p className="text-amber-600">
+            <p className="text-warning-foreground">
               A later pay run already exists for this frequency ({formatDate(next.periodStart)} –{" "}
               {formatDate(next.periodEnd)} onward). Its payslips were generated based on this period
               already being finalised — reopening this one won&apos;t undo that automatically.

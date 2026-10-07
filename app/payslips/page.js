@@ -84,7 +84,7 @@ function PayRunsOverview({ payRuns, counts, onSelect }) {
                     </TableCell>
                     <TableCell>{c.finalised}</TableCell>
                     <TableCell>
-                      {pending > 0 ? <Badge variant="secondary">{pending}</Badge> : pending}
+                      {pending > 0 ? <Badge variant="warning">{pending}</Badge> : pending}
                     </TableCell>
                     <TableCell>
                       <Button size="sm" variant="outline" onClick={() => onSelect(run.id)}>
@@ -250,7 +250,7 @@ function PayslipsContent() {
           <span className="text-sm text-muted-foreground">
             Pay date {formatDate(selectedRun.pay_date)}
           </span>
-          <Badge variant={selectedRun.status === "finalised" ? "default" : "secondary"}>
+          <Badge variant={selectedRun.status === "finalised" ? "success" : "warning"}>
             {selectedRun.status === "finalised" ? "Finalised" : "Draft"}
           </Badge>
 

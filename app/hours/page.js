@@ -107,7 +107,7 @@ function HoursContent() {
                 <TableCell>{payRunLabel(run)}</TableCell>
                 <TableCell>{formatDate(run.pay_date)}</TableCell>
                 <TableCell>
-                  <Badge variant={run.status === "finalised" ? "default" : "secondary"}>
+                  <Badge variant={run.status === "finalised" ? "success" : "warning"}>
                     {run.status === "finalised" ? "Finalised" : "Draft"}
                   </Badge>
                 </TableCell>
@@ -146,7 +146,7 @@ function HoursContent() {
             <span className="text-sm text-muted-foreground">
               Pay date {formatDate(selectedRun.pay_date)}
             </span>
-            <Badge variant={selectedRun.status === "finalised" ? "default" : "secondary"}>
+            <Badge variant={selectedRun.status === "finalised" ? "success" : "warning"}>
               {selectedRun.status === "finalised" ? "Finalised" : "Draft"}
             </Badge>
           </div>
