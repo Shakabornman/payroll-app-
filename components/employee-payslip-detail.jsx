@@ -13,6 +13,8 @@ import {
 import { SetHourlyRateDialog } from "@/components/set-hourly-rate-dialog";
 import { AddRegularInputDialog } from "@/components/add-regular-input-dialog";
 import { AddPayslipLineDialog } from "@/components/add-payslip-line-dialog";
+import { EditPayslipLineDialog } from "@/components/edit-payslip-line-dialog";
+import { EditRegularInputDialog } from "@/components/edit-regular-input-dialog";
 import {
   Table,
   TableBody,
@@ -110,7 +112,7 @@ function lineGroup(category) {
   return "deduction";
 }
 
-function LineItemTable({ rows }) {
+function LineItemTable({ rows, editable, employeeNumber, payRunId, onChanged }) {
   return (
     <Table>
       <TableHeader>
@@ -118,6 +120,7 @@ function LineItemTable({ rows }) {
           <TableHead>Pay item</TableHead>
           <TableHead>Amount</TableHead>
           <TableHead>YTD</TableHead>
+          {editable && <TableHead />}
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -126,6 +129,18 @@ function LineItemTable({ rows }) {
             <TableCell>{row.pay_items?.name ?? "—"}</TableCell>
             <TableCell>{formatMoney(row.amount)}</TableCell>
             <TableCell>{formatMoney(row.ytd_amount)}</TableCell>
+            {editable && (
+              <TableCell>
+                {row.pay_items?.input_type === "once_off" && (
+                  <EditPayslipLineDialog
+                    line={row}
+                    employeeNumber={employeeNumber}
+                    payRunId={payRunId}
+                    onSaved={onChanged}
+                  />
+                )}
+              </TableCell>
+            )}
           </TableRow>
         ))}
       </TableBody>
@@ -164,7 +179,7 @@ export function EmployeePayslipDetail({ employee, payRunId }) {
     () =>
       supabase
         .from("payslip_lines")
-        .select("id, amount, ytd_amount, pay_items(name, category)")
+        .select("id, amount, ytd_amount, pay_items(name, category, input_type)")
         .eq("employee_number", employeeNumber)
         .eq("pay_run_id", payRunId),
     [employeeNumber, payRunId, payslipRefreshKey]
@@ -265,13 +280,25 @@ export function EmployeePayslipDetail({ employee, payRunId }) {
               {income.length > 0 && (
                 <div>
                   <p className="mb-1 text-xs font-medium text-muted-foreground uppercase">Income</p>
-                  <LineItemTable rows={income} />
+                  <LineItemTable
+                    rows={income}
+                    editable={!run?.finalised_at}
+                    employeeNumber={employeeNumber}
+                    payRunId={payRunId}
+                    onChanged={() => setPayslipRefreshKey((key) => key + 1)}
+                  />
                 </div>
               )}
               {deductions.length > 0 && (
                 <div>
                   <p className="mb-1 text-xs font-medium text-muted-foreground uppercase">Deductions</p>
-                  <LineItemTable rows={deductions} />
+                  <LineItemTable
+                    rows={deductions}
+                    editable={!run?.finalised_at}
+                    employeeNumber={employeeNumber}
+                    payRunId={payRunId}
+                    onChanged={() => setPayslipRefreshKey((key) => key + 1)}
+                  />
                 </div>
               )}
               {employerContributions.length > 0 && (
@@ -349,6 +376,7 @@ export function EmployeePayslipDetail({ employee, payRunId }) {
                   <TableHead>Amount</TableHead>
                   <TableHead>Effective from</TableHead>
                   <TableHead>Effective to</TableHead>
+                  <TableHead />
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -359,6 +387,13 @@ export function EmployeePayslipDetail({ employee, payRunId }) {
                     <TableCell>{formatMoney(row.amount)}</TableCell>
                     <TableCell>{formatDate(row.effective_from)}</TableCell>
                     <TableCell>{row.effective_to ? formatDate(row.effective_to) : "Ongoing"}</TableCell>
+                    <TableCell>
+                      <EditRegularInputDialog
+                        row={row}
+                        employeeNumber={employeeNumber}
+                        onSaved={() => setRegularInputsRefreshKey((key) => key + 1)}
+                      />
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>

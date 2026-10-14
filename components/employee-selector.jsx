@@ -20,7 +20,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-const ALL_PAY_POINTS = "all";
+export const ALL_PAY_POINTS = "all";
 
 const SORT_ACCESSORS = {
   employee_number: (e) => e.employee_number,
@@ -49,13 +49,18 @@ function sortIndicator(sort, key) {
 // (payroll.employees only has employee_number, full_name, job_title,
 // employment_date, banking_*, pay_frequency_id, pay_point_id, payment_method,
 // is_active) - add it once that schema gap is confirmed, not before.
-export function EmployeeSelector({ onSelect }) {
-  const [search, setSearch] = useState("");
-  const [payPointId, setPayPointId] = useState(ALL_PAY_POINTS);
+export function EmployeeSelector({
+  onSelect,
+  search,
+  onSearchChange,
+  payPointId,
+  onPayPointIdChange,
+  sort,
+  onSortChange,
+}) {
   const [payPoints, setPayPoints] = useState([]);
   const [employees, setEmployees] = useState(null);
   const [error, setError] = useState("");
-  const [sort, setSort] = useState({ key: "full_name", dir: "asc" });
 
   const sortedEmployees = useMemo(() => {
     if (!employees) return null;
@@ -69,10 +74,8 @@ export function EmployeeSelector({ onSelect }) {
   }, [employees, sort]);
 
   function toggleSort(key) {
-    setSort((current) =>
-      current.key === key
-        ? { key, dir: current.dir === "asc" ? "desc" : "asc" }
-        : { key, dir: "asc" }
+    onSortChange(
+      sort.key === key ? { key, dir: sort.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" }
     );
   }
 
@@ -127,7 +130,7 @@ export function EmployeeSelector({ onSelect }) {
         <Input
           placeholder="Search by name or employee number"
           value={search}
-          onChange={(event) => setSearch(event.target.value)}
+          onChange={(event) => onSearchChange(event.target.value)}
           className="max-w-xs"
         />
         <Select
@@ -136,7 +139,7 @@ export function EmployeeSelector({ onSelect }) {
             ...payPoints.map((point) => ({ value: point.id, label: point.name })),
           ]}
           value={payPointId}
-          onValueChange={setPayPointId}
+          onValueChange={onPayPointIdChange}
         >
           <SelectTrigger>
             <SelectValue placeholder="All pay points" />
